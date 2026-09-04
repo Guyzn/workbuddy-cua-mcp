@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+shots/
+.DS_Store
+*.swp

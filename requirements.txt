@@ -1,0 +1,5 @@
+mcp>=1.0.0
+pyobjc-framework-Quartz>=10.0
+pyobjc-framework-ApplicationServices>=10.0
+pyobjc-framework-Cocoa>=10.0
+websockets>=12.0
