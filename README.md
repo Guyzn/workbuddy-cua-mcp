@@ -1,11 +1,11 @@
-# Workbuddy Computer Use for Intel Mac
+# 专门给老Mac，或者说黑苹果做的Workbuddy Computer Use
 
 > **这是给 Intel Mac 的。**
 > Apple Silicon（M1/M2/M3/M4）的 macOS 已经有原生 Computer Use，不需要这个。如果你在用 M 系列芯片，跳过就好——你们的原生方案更好。
 
 ---
 
-# Workbuddy Computer Use for Intel Mac（中英双语）
+# Workbuddy Computer Use for Intel Mac
 
 ## 这是什么
 
