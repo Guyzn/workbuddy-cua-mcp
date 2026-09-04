@@ -75,6 +75,14 @@ browser_dom(action, ...) → str
 | scroll | x, y | 滚动 |
 | get_dom | — | 获取 DOM |
 
+## 运行纪律（必读）
+
+- **本 server 是 stdio 协议 MCP server，由 WorkBuddy 宿主进程负责拉起/管理。**
+- **禁止** 用 `nohup python server.py &` 或任何方式手动后台拉起——stdio server 脱离宿主后宿主永远连不上（报 `Not connected`），还会留下孤儿进程。
+- **改了代码后重启方式**：`pkill -f "skills/cua-mcp/server.py"` 清掉残留进程 → 让宿主重连（重开会话或重启 WorkBuddy），宿主会用新代码重新 spawn。
+- 验证修复可用直调模块（`python3 -c "from modules.computer_control import ..."`）或 stdio 冒烟脚本（Popen server.py + JSON-RPC initialize + tools/call），两者都不影响宿主管线。
+- ⚠️ get_windows 走 osascript：其输出会把嵌套列表**扁平化**且不转义字符串，**禁止** 用 `ast.literal_eval` 解析；必须让 AppleScript 端自做 JSON 转义、每行输出一个 JSON 对象，Python 端逐行 `json.loads`。
+
 ## 安全
 
 - 辅助功能权限：首次使用需在系统设置中授权

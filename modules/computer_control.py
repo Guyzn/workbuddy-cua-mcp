@@ -325,30 +325,106 @@ class WindowManager:
 
     @staticmethod
     def list_windows() -> List[Dict[str, Any]]:
-        """列出所有窗口信息。"""
-        if not HAS_QUARTZ:
-            raise RuntimeError("Quartz not available")
-        windows = CGWindowListCopyWindowInfo(
-            kCGWindowListOptionAll, kCGNullWindowID
-        )
-        result = []
-        for w in windows:
-            if w.get(kCGWindowLayer, 0) != 0:  # 只取普通窗口层
-                continue
-            result.append({
-                "id": w.get(kCGWindowNumber, 0),
-                "title": w.get(kCGWindowName, ""),
-                "owner": w.get(kCGWindowOwnerName, ""),
-                "pid": w.get(kCGWindowOwnerPID, 0),
-                "bounds": w.get(kCGWindowBounds, {}),
-                "onscreen": w.get(kCGWindowIsOnscreen, False),
-            })
-        return result
+        """列出所有窗口信息。
+
+        纯 AppleScript 实现：osascript 的返回值会被扁平化（嵌套列表结构
+        丢失），且字符串中的逗号/引号不做转义，因此不能依赖 ast 解析。
+        改为让 AppleScript 端自行做 JSON 转义并输出「每行一个 JSON 对象」，
+        Python 端逐行 json.loads，天然规避 Quartz/NSDictionary 序列化问题。
+        """
+        import json
+        import subprocess
+
+        script = r'''
+        on jsonEscape(s)
+            set outChars to ""
+            repeat with c in characters of s
+                set t to contents of c
+                if t is "\"" then
+                    set outChars to outChars & "\\\""
+                else if t is "\\" then
+                    set outChars to outChars & "\\\\"
+                else if (ASCII number t) < 32 then
+                    set outChars to outChars & " "
+                else
+                    set outChars to outChars & t
+                end if
+            end repeat
+            return outChars
+        end jsonEscape
+
+        tell application "System Events"
+            set outputLines to ""
+            set allProcesses to every application process whose background only is false
+            repeat with proc in allProcesses
+                try
+                    set procName to name of proc
+                    set procPID to unix id of proc
+                    set procWindows to every window of proc
+                    repeat with win in procWindows
+                        try
+                            set winName to name of win
+                            set winPos to position of win
+                            set winSize to size of win
+                            set escApp to my jsonEscape(procName as text)
+                            set escTitle to my jsonEscape(winName as text)
+                            set outputLines to outputLines & "{\"owner\":\"" & escApp & ¬
+                                "\",\"title\":\"" & escTitle & ¬
+                                "\",\"pid\":" & (procPID as text) & ¬
+                                ",\"x\":" & (item 1 of winPos as text) & ¬
+                                ",\"y\":" & (item 2 of winPos as text) & ¬
+                                ",\"w\":" & (item 1 of winSize as text) & ¬
+                                ",\"h\":" & (item 2 of winSize as text) & "}" & linefeed
+                        end try
+                    end repeat
+                end try
+            end repeat
+            return outputLines
+        end tell
+        '''
+        result: List[Dict[str, Any]] = []
+        try:
+            out = subprocess.run(
+                ["osascript", "-e", script],
+                capture_output=True, text=True, timeout=15,
+            )
+            if out.returncode != 0:
+                return result
+            for line in out.stdout.splitlines():
+                line = line.strip()
+                if not line or not line.startswith("{"):
+                    continue
+                try:
+                    w = json.loads(line)
+                    result.append({
+                        "id": 0,
+                        "title": str(w.get("title", "")),
+                        "owner": str(w.get("owner", "")),
+                        "pid": int(w.get("pid", 0)),
+                        "bounds": {
+                            "X": float(w.get("x", 0)),
+                            "Y": float(w.get("y", 0)),
+                            "Width": float(w.get("w", 0)),
+                            "Height": float(w.get("h", 0)),
+                        },
+                        "onscreen": True,
+                    })
+                except Exception:
+                    continue
+            return result
+        except Exception:
+            return result
 
     @staticmethod
     def get_foreground_window() -> Optional[Dict[str, Any]]:
-        """获取当前前台窗口信息（通过 AppleScript）。"""
+        """获取当前前台窗口信息（通过 AppleScript）。
+
+        与 list_windows 同理：osascript 的 list 输出以 ", " 连接且字符串
+        不转义，窗口名为空时输出会变成 "App, "，split 后 app 名残留逗号。
+        改用 ASCII unit separator (\\x1f) 作分隔符，彻底免疫内容里的逗号。
+        """
         import subprocess
+        sep = "\x1f"
         script = '''
         tell application "System Events"
             set frontApp to name of first application process whose frontmost is true
@@ -356,7 +432,8 @@ class WindowManager:
             try
                 set frontWindow to name of first window of first application process whose frontmost is true
             end try
-            return {frontApp, frontWindow}
+            set AppleScript's text item delimiters to (ASCII character 31)
+            return ({frontApp, frontWindow}) as text
         end tell
         '''
         try:
@@ -365,7 +442,7 @@ class WindowManager:
                 capture_output=True, text=True, timeout=5
             )
             if out.returncode == 0:
-                parts = out.stdout.strip().split(", ")
+                parts = out.stdout.strip().split(sep)
                 return {
                     "app": parts[0] if len(parts) > 0 else "",
                     "window": parts[1] if len(parts) > 1 else "",

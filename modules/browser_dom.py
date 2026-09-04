@@ -31,10 +31,22 @@ from typing import Optional, Dict, Any, List
 
 # ─── 配置 ─────────────────────────────────────────────────────────────────────
 PORT = int(os.environ.get("BROWSER_DEBUG_PORT", "9225"))
-CHROME = os.environ.get(
-    "CHROME_PATH",
+
+# 浏览器路径自动检测：优先用户指定 → Chrome → Edge → 其他 Chromium
+_fallback_paths = [
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-)
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+    "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+    "/Applications/Opera.app/Contents/MacOS/Opera",
+    "/Applications/Vivaldi.app/Contents/MacOS/Vivaldi",
+]
+
+raw_chrome = os.environ.get("CHROME_PATH", "")
+if raw_chrome and Path(raw_chrome).exists():
+    CHROME = raw_chrome
+else:
+    CHROME = next((p for p in _fallback_paths if Path(p).exists()), _fallback_paths[0])
+
 USER_DATA = os.environ.get(
     "CHROME_USER_DATA_DIR",
     str(Path.home() / "Library" / "Application Support" / "workbuddy-browser-profile"),
